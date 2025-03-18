@@ -18,7 +18,7 @@ permissions: {}
 jobs:
   ### Test the GitHub Action in this Repository ###
   tests:
-    name: "Test local GitHub Action"
+    name: "Action Testing"
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -26,20 +26,83 @@ jobs:
       - name: "Checkout repository"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Perform setup prior to running test(s)
-      - name: "Testing setup step"
-        shell: bash
-        run: |
-          # Testing setup step
-          echo "Testing setup step"
-          echo "Testing setup step/summary output" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: "Running local action: ${{ github.repository }}"
+      - name: "Run Action: ${{ github.repository }} [valid package]"
         uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
 
-      - name: "Validating local action: ${{ github.repository }}"
-        shell: bash
-        run: |
-          # Local action validation
-          echo "Validating local action: ${{ github.repository }}"
-          echo "Validation step summary output" >> "$GITHUB_STEP_SUMMARY"
+      - name: "Run Action: ${{ github.repository }} [valid package/version]"
+        uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
+          package_version: 1.1.10
+
+      # Note: test when version string prefixed with a "v" character
+      - name: "Run Action: ${{ github.repository }} [valid package/version]"
+        uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
+          package_version: v1.1.10
+
+      # yamllint disable-line rule:line-length
+      - name: "Run Action: ${{ github.repository }} [valid package/invalid version]"
+        uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
+          package_version: 13.69.666
+
+      # yamllint disable-line rule:line-length
+      - name: "Run Action: ${{ github.repository }} [valid package/development version]"
+        uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: osc-github-devops
+          package_version: 0.1.22.dev1
+          pre_release: "true"
+
+      # Check for invalid package and version
+      - name: "Run Action: ${{ github.repository }} [invalid package/version]"
+        uses: ./
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR-random-thing
+          package_version: 13.69.666
+
+      # Check a non-functioning/resolving repository URL
+      - name: "Run Action: ${{ github.repository }} invalid repo [FAILURE]"
+        uses: ./
+        # Deliberately testing for failure
+        continue-on-error: true
+        with:
+          # Invalid top-level domain will never resolve
+          index_url: https://non.existent.ogfdhfdgrg/
+          package_name: gremlin
+          package_version: 13.69.666
+
+      # Not querying pre-releases, expected to fail
+      # yamllint disable-line rule:line-length
+      - name: "Run Action: ${{ github.repository }} pre-releases not requested [FAILURE]"
+        uses: ./
+        # Deliberately testing for failure
+        continue-on-error: true
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: osc-github-devops
+          package_version: 0.1.22.dev1
+          exit_on_fail: "true"
+
+      # Check for invalid package and version
+      # yamllint disable-line rule:line-length
+      - name: "Run Action: ${{ github.repository }} invalid package/version [FAILURE]"
+        uses: ./
+        # Deliberately testing for failure
+        continue-on-error: true
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR-random-thing
+          package_version: 13.69.666
+          exit_on_fail: "true"

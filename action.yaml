@@ -1,39 +1,140 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2025 The Linux Foundation
+# SPDX-FileCopyrightText: 2024 The Linux Foundation
 
-# actions-template
-name: "🛠️ Actions Template"
-description: "Description of action"
-# Any relevant notes/observations can go here
+# pypi-version-check-action
+name: "📦 PyPI Package Check"
+description: "Checks PyPI for a given package (and optional build/release)"
 
 inputs:
-  INPUT:
-    description: "Description of input"
-    required: false
+  # Mandatory
+  PACKAGE_NAME:
+    description: "Python package name"
     type: string
-    default: "input"
+    required: true
+  # Optional
+  PACKAGE_VERSION:
+    # Leading "v" character will be automatically stripped
+    description: "Package build/version/tag"
+    type: string
+    required: false
+  INDEX_URL:
+    description: "Package index search URL"
+    type: string
+    required: false
+    default: "https://pypi.org/simple"
+  PRE_RELEASE:
+    description: "Permit querying development and pre-release versions"
+    type: boolean
+    required: false
+    default: "false"
+  EXIT_ON_FAIL:
+    description: "Fail if any error occurs"
+    type: boolean
+    required: false
+    default: "false"
 
 outputs:
-  OUTPUT:
-    description: "Description of output"
-    value: ${{ steps.code.outputs.output }}
+  PACKAGE_MATCH:
+    description: "Set true when package exists in index"
+    value: ${{ steps.check.outputs.package_match }}
+  VERSION_MATCH:
+    description: "Set true when web package/version exists"
+    value: ${{ steps.check.outputs.version_match }}
 
 runs:
   using: "composite"
   steps:
-    - name: "Friendly Name"
-      id: code
+    - name: "Check pip installed/available"
       shell: bash
       run: |
-        # Friendly Name
-        INPUT="${{ inputs.input }}"
-        if [ -z "$INPUT" ]; then
-          echo "Error: mandatory input INPUT was not set/configured ❌"
-          exit 1
+        # Check pip installed/available
+        PIP_CMD=$(which pip)
+        if [ ! -x $PIP_CMD ]; then
+          if ! (python -m ensurepip --upgrade > /dev/null); then
+            echo "Unable to find/install pip command ❌"
+            echo "Check instance type and OS environment"; exit 1
+          else
+            echo "Successfully installed pip ✅"
+          fi
         fi
 
-        echo "output=$INPUT" >> "$GITHUB_ENV"
-        echo "output=$INPUT" >> "$GITHUB_OUTPUT"
-        echo "Action received a valid input: $INPUT ✅"
-        echo "Action received a valid input: $INPUT ✅" >> "$GITHUB_STEP_SUMMARY"
+    - name: "Check Python package index"
+      id: check
+      shell: bash
+      run: |
+        # Check Python package index
+        INDEX_URL="${{ inputs.INDEX_URL }}"
+        PACKAGE_NAME="${{ inputs.PACKAGE_NAME }}"
+        PACKAGE_VERSION="${{ inputs.PACKAGE_VERSION }}"
+        PRE_RELEASE=$(echo ${{ inputs.PRE_RELEASE }} |\
+        tr '[:upper:]' '[:lower:]')
+        EXIT_ON_FAIL=$(echo ${{ inputs.EXIT_ON_FAIL }} |\
+          tr '[:upper:]' '[:lower:]')
+
+        if [[ "$PACKAGE_VERSION" == v* ]]; then
+          echo "Stripping non-numeric leading character from version string ⚠️"
+          PACKAGE_VERSION="${PACKAGE_VERSION:1}"
+        fi
+
+        echo "Searching index:   $INDEX_URL"
+        echo "For package:       $PACKAGE_NAME $PACKAGE_VERSION"
+        if [ "$PRE_RELEASE" = "true" ]; then
+          echo "Including pre-release and development versions 💬"
+        fi
+
+        # Note: pip index is experimental and NOT fully supported
+        if [ "$PRE_RELEASE" = "true" ]; then
+          # Additional flag to report development builds
+          OUTPUT=$(pip index --disable-pip-version-check \
+              "--index-url=$INDEX_URL" versions --pre \
+              "$PACKAGE_NAME" || true)
+        else
+          OUTPUT=$(pip index --disable-pip-version-check \
+            "--index-url=$INDEX_URL" versions \
+            "$PACKAGE_NAME" || true)
+        fi
+
+        if [ -z "$OUTPUT" ]; then
+          PACKAGE_MATCH="false"
+          echo "Package $PACKAGE_NAME NOT found in index ❌"
+          # Do not check package version when package is invalid
+          unset PACKAGE_VERSION
+          QUERY_ERROR="true"
+        fi
+
+        if (echo "$OUTPUT" | grep "Available versions" >/dev/null 2>&1); then
+           PACKAGE_MATCH="true"
+           echo "Package $PACKAGE_NAME found in index ✅"
+        fi
+
+        VERSION_MATCH="untested"
+
+        if [ -n "$PACKAGE_VERSION" ]; then
+          VERSIONS=$(echo "$OUTPUT" | grep 'Available versions' \
+            | sed "s/,//g" | sed "s/Available versions://")
+
+           # Assume no match, then iterate over all reported versions
+           VERSION_MATCH="false"
+           for VERSION in $VERSIONS; do
+             if [ "$VERSION" = "$PACKAGE_VERSION" ]; then
+               # A package with the requested version was found
+               VERSION_MATCH="true"
+               break
+             fi
+           done
+           if [ "$VERSION_MATCH" = "true" ]; then
+              echo "Version $PACKAGE_VERSION was found in index ✅"
+           else
+              echo "Version $PACKAGE_VERSION was NOT found in index ❌"
+              QUERY_ERROR="true"
+           fi
+        fi
+        if [ "$EXIT_ON_FAIL" = "true" ] && [ "$QUERY_ERROR" = "true" ]; then
+          echo "Error: a query failed to return results ❌"
+          exit 1
+        fi
+        echo "package_match=$PACKAGE_MATCH" >> "$GITHUB_ENV"
+        echo "package_match=$PACKAGE_MATCH" >> "$GITHUB_OUTPUT"
+        echo "version_match=$VERSION_MATCH" >> "$GITHUB_ENV"
+        echo "version_match=$VERSION_MATCH" >> "$GITHUB_OUTPUT"
