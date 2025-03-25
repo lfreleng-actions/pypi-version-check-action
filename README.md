@@ -40,7 +40,7 @@ Query URL examples:
 | PACKAGE_VERSION | False    |                           | Optional release/version to check            |
 | INDEX_URL       | False    | <https://pypi.org/simple> | The Python package index server URL to query |
 | PRE_RELEASE     | False    | False                     | Also checks pre-release/development versions |
-| EXIT_ON_FAIL    | False    | False                     | Set true to fail if any query fails          |
+| EXIT_ON_FAIL    | False    | False                     | Set true to exit with error on failure       |
 
 <!-- markdownlint-enable MD013 -->
 
