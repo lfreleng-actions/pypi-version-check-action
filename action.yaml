@@ -29,7 +29,7 @@ inputs:
     required: false
     default: "false"
   EXIT_ON_FAIL:
-    description: "Fail if any error occurs"
+    description: "Exit with error on failure"
     type: boolean
     required: false
     default: "false"
@@ -84,7 +84,7 @@ runs:
         fi
 
         # Note: pip index is experimental and NOT fully supported
-        if [ "$PRE_RELEASE" = "true" ]; then
+        if [ "f$PRE_RELEASE" = "ftrue" ]; then
           # Additional flag to report development builds
           OUTPUT=$(pip index --disable-pip-version-check \
               "--index-url=$INDEX_URL" versions --pre \
@@ -130,7 +130,7 @@ runs:
               QUERY_ERROR="true"
            fi
         fi
-        if [ "$EXIT_ON_FAIL" = "true" ] && [ "$QUERY_ERROR" = "true" ]; then
+        if [ "f$EXIT_ON_FAIL" = "ftrue" ] && [ "$QUERY_ERROR" = "true" ]; then
           echo "Error: a query failed to return results ❌"
           exit 1
         fi
