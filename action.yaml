@@ -10,29 +10,24 @@ inputs:
   # Mandatory
   PACKAGE_NAME:
     description: "Python package name"
-    type: string
     required: true
   # Optional
   PACKAGE_VERSION:
     # Leading "v" character will be automatically stripped
     description: "Package build/version/tag"
-    type: string
     required: false
   INDEX_URL:
     description: "Package index search URL"
-    type: string
     required: false
-    default: "https://pypi.org/simple"
+    default: 'https://pypi.org/simple'
   PRE_RELEASE:
     description: "Permit querying development and pre-release versions"
-    type: boolean
     required: false
-    default: "false"
+    default: 'false'
   EXIT_ON_FAIL:
     description: "Exit with error on failure"
-    type: boolean
     required: false
-    default: "false"
+    default: 'false'
 
 outputs:
   PACKAGE_MATCH:
