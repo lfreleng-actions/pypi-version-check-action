@@ -57,14 +57,20 @@ runs:
     - name: "Check Python package index"
       id: check
       shell: bash
+      env:
+        INPUT_INDEX_URL: "${{ inputs.INDEX_URL }}"
+        INPUT_PACKAGE_NAME: "${{ inputs.PACKAGE_NAME }}"
+        INPUT_PACKAGE_VERSION: "${{ inputs.PACKAGE_VERSION }}"
+        INPUT_PRE_RELEASE: "${{ inputs.PRE_RELEASE }}"
+        INPUT_EXIT_ON_FAIL: "${{ inputs.EXIT_ON_FAIL }}"
       run: |
         # Check Python package index
-        INDEX_URL="${{ inputs.INDEX_URL }}"
-        PACKAGE_NAME="${{ inputs.PACKAGE_NAME }}"
-        PACKAGE_VERSION="${{ inputs.PACKAGE_VERSION }}"
-        PRE_RELEASE=$(echo ${{ inputs.PRE_RELEASE }} |\
+        INDEX_URL="$INPUT_INDEX_URL"
+        PACKAGE_NAME="$INPUT_PACKAGE_NAME"
+        PACKAGE_VERSION="$INPUT_PACKAGE_VERSION"
+        PRE_RELEASE=$(printf '%s' "$INPUT_PRE_RELEASE" |\
         tr '[:upper:]' '[:lower:]')
-        EXIT_ON_FAIL=$(echo ${{ inputs.EXIT_ON_FAIL }} |\
+        EXIT_ON_FAIL=$(printf '%s' "$INPUT_EXIT_ON_FAIL" |\
           tr '[:upper:]' '[:lower:]')
 
         if [[ "$PACKAGE_VERSION" == v* ]]; then
@@ -129,7 +135,5 @@ runs:
           echo "Error: a query failed to return results ❌"
           exit 1
         fi
-        echo "package_match=$PACKAGE_MATCH" >> "$GITHUB_ENV"
         echo "package_match=$PACKAGE_MATCH" >> "$GITHUB_OUTPUT"
-        echo "version_match=$VERSION_MATCH" >> "$GITHUB_ENV"
         echo "version_match=$VERSION_MATCH" >> "$GITHUB_OUTPUT"
