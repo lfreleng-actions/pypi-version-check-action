@@ -33,19 +33,14 @@ jobs:
       contents: read
     timeout-minutes: 4
     steps:
-      - name: "Checkout repository"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: "Run Action: ${{ github.repository }} [valid package]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR
 
       - name: "Run Action: ${{ github.repository }} [valid package/version]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR
@@ -53,7 +48,7 @@ jobs:
 
       # Note: test when version string prefixed with a "v" character
       - name: "Run Action: ${{ github.repository }} [valid package/version]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR
@@ -61,7 +56,7 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} [valid package/invalid version]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR
@@ -69,7 +64,7 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} [valid package/development version]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: osc-github-devops
@@ -78,7 +73,7 @@ jobs:
 
       # Check for invalid package and version
       - name: "Run Action: ${{ github.repository }} [invalid package/version]"
-        uses: ./
+        uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR-random-thing
@@ -86,7 +81,7 @@ jobs:
 
       # Check a non-functioning/resolving repository URL
       - name: "Run Action: ${{ github.repository }} invalid repo [FAILURE]"
-        uses: ./
+        uses: $/
         # Deliberately testing for failure
         continue-on-error: true
         with:
@@ -98,7 +93,7 @@ jobs:
       # Not querying pre-releases, expected to fail
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} pre-releases not requested [FAILURE]"
-        uses: ./
+        uses: $/
         # Deliberately testing for failure
         continue-on-error: true
         with:
@@ -110,7 +105,7 @@ jobs:
       # Check for invalid package and version
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} invalid package/version [FAILURE]"
-        uses: ./
+        uses: $/
         # Deliberately testing for failure
         continue-on-error: true
         with:
