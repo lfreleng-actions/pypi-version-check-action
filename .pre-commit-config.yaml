@@ -7,6 +7,9 @@ ci:
   skip:
     - gha-workflow-linter
     - aislop
+    # With the pytest and pyyaml it needs for the tests, the hook's
+    # environment exceeds the pre-commit.ci 250MiB size limit
+    - basedpyright
   autofix_commit_msg: |
     Chore: Pre-commit autofixes
 
@@ -119,6 +122,7 @@ repos:
     rev: 706e6acebe9e88c2c28d1527d3085a14b11794c4  # frozen: 1.40.1
     hooks:
       - id: basedpyright
+        additional_dependencies: ["pytest", "pyyaml"]
 
   - repo: https://github.com/lfreleng-actions/gha-workflow-linter
     rev: 0c582e431022f1c7004196fb4ea32744d1fe4843  # frozen: v1.7.0
