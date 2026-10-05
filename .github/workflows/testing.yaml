@@ -113,3 +113,29 @@ jobs:
           package_name: ITR-random-thing
           package_version: 13.69.666
           exit_on_fail: "true"
+
+  ### Unit cover for issue #150: the pip fallback on a pip-free PATH ###
+  tests-pip-fallback:
+    name: "Test pip Fallback"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Python"
+        # yamllint disable-line rule:line-length
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: "Run pip fallback tests"
+        shell: bash
+        run: |
+          # Run pip fallback tests
+          python -m pip install --disable-pip-version-check -q pytest pyyaml
+          python -m pytest tests/test_pip_fallback.py -v

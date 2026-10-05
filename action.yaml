@@ -44,14 +44,14 @@ runs:
       shell: bash
       run: |
         # Check pip installed/available
-        PIP_CMD=$(which pip)
-        if [ ! -x $PIP_CMD ]; then
-          if ! (python -m ensurepip --upgrade > /dev/null); then
+        # Probe pip through the interpreter the next step runs it with;
+        # ensurepip does not guarantee a bare "pip" command on PATH
+        if ! python3 -m pip --version > /dev/null 2>&1; then
+          if ! python3 -m ensurepip --upgrade > /dev/null; then
             echo "Unable to find/install pip command ❌"
             echo "Check instance type and OS environment"; exit 1
-          else
-            echo "Successfully installed pip ✅"
           fi
+          echo "Successfully installed pip ✅"
         fi
 
     - name: "Check Python package index"
@@ -87,11 +87,11 @@ runs:
         # Note: pip index is experimental and NOT fully supported
         if [ "f$PRE_RELEASE" = "ftrue" ]; then
           # Additional flag to report development builds
-          OUTPUT=$(pip index --disable-pip-version-check \
+          OUTPUT=$(python3 -m pip index --disable-pip-version-check \
               "--index-url=$INDEX_URL" versions --pre \
               "$PACKAGE_NAME" || true)
         else
-          OUTPUT=$(pip index --disable-pip-version-check \
+          OUTPUT=$(python3 -m pip index --disable-pip-version-check \
             "--index-url=$INDEX_URL" versions \
             "$PACKAGE_NAME" || true)
         fi
