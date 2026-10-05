@@ -12,11 +12,6 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    paths:
-      - '**'
-      - '!.github/**'
-      - '!.*'
-      - '!tox.ini'
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -34,12 +29,14 @@ jobs:
     timeout-minutes: 4
     steps:
       - name: "Run Action: ${{ github.repository }} [valid package]"
+        id: valid-package
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
           package_name: ITR
 
       - name: "Run Action: ${{ github.repository }} [valid package/version]"
+        id: valid-version
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
@@ -47,7 +44,9 @@ jobs:
           package_version: 1.1.10
 
       # Note: test when version string prefixed with a "v" character
-      - name: "Run Action: ${{ github.repository }} [valid package/version]"
+      # yamllint disable-line rule:line-length
+      - name: "Run Action: ${{ github.repository }} [valid package/v-prefixed version]"
+        id: v-prefixed-version
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
@@ -56,6 +55,7 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} [valid package/invalid version]"
+        id: invalid-version
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
@@ -64,6 +64,7 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} [valid package/development version]"
+        id: development-version
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
@@ -73,6 +74,7 @@ jobs:
 
       # Check for invalid package and version
       - name: "Run Action: ${{ github.repository }} [invalid package/version]"
+        id: invalid-package
         uses: $/
         with:
           index_url: https://test.pypi.org/simple
@@ -81,6 +83,7 @@ jobs:
 
       # Check a non-functioning/resolving repository URL
       - name: "Run Action: ${{ github.repository }} invalid repo [FAILURE]"
+        id: invalid-repo
         uses: $/
         # Deliberately testing for failure
         continue-on-error: true
@@ -89,10 +92,13 @@ jobs:
           index_url: https://non.existent.ogfdhfdgrg/
           package_name: gremlin
           package_version: 13.69.666
+          # Without this, an unreachable index only sets package_match
+          exit_on_fail: "true"
 
       # Not querying pre-releases, expected to fail
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} pre-releases not requested [FAILURE]"
+        id: pre-release-not-requested
         uses: $/
         # Deliberately testing for failure
         continue-on-error: true
@@ -105,6 +111,7 @@ jobs:
       # Check for invalid package and version
       # yamllint disable-line rule:line-length
       - name: "Run Action: ${{ github.repository }} invalid package/version [FAILURE]"
+        id: invalid-package-exit
         uses: $/
         # Deliberately testing for failure
         continue-on-error: true
@@ -113,6 +120,59 @@ jobs:
           package_name: ITR-random-thing
           package_version: 13.69.666
           exit_on_fail: "true"
+
+      # Each step above passes whatever the action reports, so check the
+      # results here. A failing case exits before writing its outputs,
+      # leaving only its outcome to check.
+      - name: "Verify action outputs and outcomes"
+        shell: bash
+        env:
+          # Each case is "<PACKAGE_MATCH> <VERSION_MATCH>"
+          VALID_PACKAGE: >-
+            ${{ steps.valid-package.outputs.PACKAGE_MATCH }}
+            ${{ steps.valid-package.outputs.VERSION_MATCH }}
+          VALID_VERSION: >-
+            ${{ steps.valid-version.outputs.PACKAGE_MATCH }}
+            ${{ steps.valid-version.outputs.VERSION_MATCH }}
+          V_PREFIXED_VERSION: >-
+            ${{ steps.v-prefixed-version.outputs.PACKAGE_MATCH }}
+            ${{ steps.v-prefixed-version.outputs.VERSION_MATCH }}
+          INVALID_VERSION: >-
+            ${{ steps.invalid-version.outputs.PACKAGE_MATCH }}
+            ${{ steps.invalid-version.outputs.VERSION_MATCH }}
+          DEVELOPMENT_VERSION: >-
+            ${{ steps.development-version.outputs.PACKAGE_MATCH }}
+            ${{ steps.development-version.outputs.VERSION_MATCH }}
+          INVALID_PACKAGE: >-
+            ${{ steps.invalid-package.outputs.PACKAGE_MATCH }}
+            ${{ steps.invalid-package.outputs.VERSION_MATCH }}
+          INVALID_REPO: ${{ steps.invalid-repo.outcome }}
+          PRE_RELEASE_NOT_REQUESTED: >-
+            ${{ steps.pre-release-not-requested.outcome }}
+          INVALID_PACKAGE_EXIT: ${{ steps.invalid-package-exit.outcome }}
+        run: |
+          # Verify action outputs and outcomes
+          FAILED=0
+          check() {
+            if [ "$3" = "$2" ]; then
+              echo "$1: '$3' ✅"
+            else
+              echo "$1: expected '$2', got '$3' ❌"
+              FAILED=1
+            fi
+          }
+          check "valid package" "true untested" "$VALID_PACKAGE"
+          check "valid package/version" "true true" "$VALID_VERSION"
+          check "v-prefixed version" "true true" "$V_PREFIXED_VERSION"
+          check "invalid version" "true false" "$INVALID_VERSION"
+          check "development version" "true true" "$DEVELOPMENT_VERSION"
+          check "invalid package" "false untested" "$INVALID_PACKAGE"
+          check "invalid repo" "failure" "$INVALID_REPO"
+          check "pre-releases not requested" "failure" \
+            "$PRE_RELEASE_NOT_REQUESTED"
+          check "invalid package, exit_on_fail" "failure" \
+            "$INVALID_PACKAGE_EXIT"
+          exit "$FAILED"
 
   ### Unit cover for issue #150: the pip fallback on a pip-free PATH ###
   tests-pip-fallback:
