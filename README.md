@@ -69,3 +69,13 @@ and fails with an error if that is not possible.
 
 To query development and pre-release packages, the action implementation uses
 the "--pre" command-line flag to gather the required versioning information.
+
+## Development
+
+The tests under `tests/` run with [uv](https://docs.astral.sh/uv/), which
+installs the versions pinned in `uv.lock` into a local `.venv`:
+
+```bash
+uv sync --frozen
+uv run --frozen pytest
+```

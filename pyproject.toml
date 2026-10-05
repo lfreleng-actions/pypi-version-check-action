@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# This repository is a composite action, not a Python package. The
+# project table only lets uv manage the environment the tests run in;
+# with no [build-system], uv never builds or installs it.
+
+[project]
+name = "pypi-version-check-action"
+version = "0.0.0"
+description = "Checks PyPI for a given package (and optional build/release)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "pyyaml==6.0.3",
+]
+
+[tool.uv.pip]
+# Covers ad-hoc "uv pip install" only; installs from uv.lock always
+# verify hashes. The release-age cooldown is the Dependabot cooldown,
+# not exclude-newer, which would also hold back security updates.
+require-hashes = true
+verify-hashes = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
