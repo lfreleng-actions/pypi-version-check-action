@@ -41,13 +41,88 @@ runs:
   using: "composite"
   steps:
     - name: "Check pip installed/available"
+      id: pip
       shell: bash
+      env:
+        ACTION_PATH: "${{ github.action_path }}"
+        RUN_PIP: "${{ github.action_path }}/scripts/run_pip.py"
+        PYTHONPATH_FILTER: >-
+          ${{ github.action_path }}/scripts/trusted_pythonpath.py
+        # Where pip may fall back to a user install when the caller's
+        # user site is in the workspace; shared by both steps.
+        FALLBACK_USER_BASE: >-
+          ${{ runner.temp }}/pypi-version-check-action/user-base
       run: |
         # Check pip installed/available
+        # The working directory is the caller's workspace. 'python3 -m'
+        # would put it first on sys.path, so a pip/ there would run in
+        # place of the installed pip; run_pip.py starts pip without it.
+        # The working directory itself is kept, so relative paths in
+        # pip's own settings still resolve.
+        #
+        # Choose python3 from PATH, skipping relative entries and any
+        # that resolve inside the workspace: an interpreter there (a
+        # .venv/bin in the checkout) would run its site-packages' .pth
+        # and sitecustomize files before pip starts. Nothing in the
+        # workspace runs to make this choice. The next step uses the
+        # same interpreter, through this step's output.
+        real_dir() { (cd "$1" 2> /dev/null && pwd -P); }
+        roots=()
+        for root in "$PWD" "${GITHUB_WORKSPACE:-}"; do
+          real="$(real_dir "$root")" && [ -n "$real" ] && roots+=("$real")
+        done
+        python=""
+        IFS=: read -r -a path_dirs <<< "$PATH"
+        for dir in "${path_dirs[@]}"; do
+          case "$dir" in /*) ;; *) continue ;; esac
+          real="$(real_dir "$dir")" || continue
+          for root in "${roots[@]}"; do
+            case "$real/" in "$root"/*) continue 2 ;; esac
+          done
+          if [ -f "$dir/python3" ] && [ -x "$dir/python3" ]; then
+            python="$dir/python3"
+            break
+          fi
+        done
+        if [ -z "$python" ]; then
+          echo "No python3 found on PATH outside the workspace ❌"; exit 1
+        fi
+        echo "python=$python" >> "$GITHUB_OUTPUT"
+        # The ensurepip call below changes directory, so a relative HOME
+        # or PYTHONUSERBASE (where pip may fall back to install) is made
+        # absolute first, keeping its meaning.
+        case "${HOME:-/}" in
+          /*) ;;
+          *) export HOME="$PWD/$HOME" ;;
+        esac
+        case "${PYTHONUSERBASE:-/}" in
+          /*) ;;
+          *) export PYTHONUSERBASE="$PWD/$PYTHONUSERBASE" ;;
+        esac
+        # PYTHONPATH entries that name the workspace (empty, relative,
+        # inside it or above it) would put the checkout on sys.path and
+        # run a sitecustomize.py there, so they are dropped; absolute
+        # entries elsewhere, such as a pip installed with --target, are
+        # kept. A user site inside the workspace, whose .pth files Python
+        # runs at start-up, moves to FALLBACK_USER_BASE, which both steps
+        # share, so pip can still fall back to a user install.
+        # The filter runs with -I -S: no workspace module and no .pth
+        # file can change what it prints. Assigned before eval, so a
+        # failure stops the step.
+        settings="$("$python" -I -S "$PYTHONPATH_FILTER")"
+        eval "$settings"
         # Probe pip through the interpreter the next step runs it with;
         # ensurepip does not guarantee a bare "pip" command on PATH
-        if ! python3 -m pip --version > /dev/null 2>&1; then
-          if ! python3 -m ensurepip --upgrade > /dev/null; then
+        if ! "$python" "$RUN_PIP" --version > /dev/null 2>&1; then
+          # ensurepip runs pip in a second interpreter started with -c,
+          # which puts its working directory first on sys.path, so run
+          # it from the action's own directory. -I would also do that,
+          # but it hides the user site from that pip, which then cannot
+          # fall back to a user install when site-packages is read-only.
+          # ensurepip ignores pip's settings, so the move changes nothing
+          # else.
+          if ! (cd "$ACTION_PATH" &&
+            "$python" -m ensurepip --upgrade > /dev/null); then
             echo "Unable to find/install pip command ❌"
             echo "Check instance type and OS environment"; exit 1
           fi
@@ -58,6 +133,12 @@ runs:
       id: check
       shell: bash
       env:
+        PYTHON: "${{ steps.pip.outputs.python }}"
+        RUN_PIP: "${{ github.action_path }}/scripts/run_pip.py"
+        PYTHONPATH_FILTER: >-
+          ${{ github.action_path }}/scripts/trusted_pythonpath.py
+        FALLBACK_USER_BASE: >-
+          ${{ runner.temp }}/pypi-version-check-action/user-base
         INPUT_INDEX_URL: "${{ inputs.INDEX_URL }}"
         INPUT_PACKAGE_NAME: "${{ inputs.PACKAGE_NAME }}"
         INPUT_PACKAGE_VERSION: "${{ inputs.PACKAGE_VERSION }}"
@@ -85,13 +166,18 @@ runs:
         fi
 
         # Note: pip index is experimental and NOT fully supported
+        # pip runs as in the step above: with the interpreter it chose,
+        # without the working directory on sys.path, only the PYTHONPATH
+        # entries outside it, and no user site inside it
+        settings="$("$PYTHON" -I -S "$PYTHONPATH_FILTER")"
+        eval "$settings"
         if [ "f$PRE_RELEASE" = "ftrue" ]; then
           # Additional flag to report development builds
-          OUTPUT=$(python3 -m pip index --disable-pip-version-check \
+          OUTPUT=$("$PYTHON" "$RUN_PIP" index --disable-pip-version-check \
               "--index-url=$INDEX_URL" versions --pre \
               "$PACKAGE_NAME" || true)
         else
-          OUTPUT=$(python3 -m pip index --disable-pip-version-check \
+          OUTPUT=$("$PYTHON" "$RUN_PIP" index --disable-pip-version-check \
             "--index-url=$INDEX_URL" versions \
             "$PACKAGE_NAME" || true)
         fi
