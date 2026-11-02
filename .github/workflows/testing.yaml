@@ -174,9 +174,9 @@ jobs:
             "$INVALID_PACKAGE_EXIT"
           exit "$FAILED"
 
-  ### Unit cover for issue #150: the pip fallback on a pip-free PATH ###
-  tests-pip-fallback:
-    name: "Test pip Fallback"
+  ### Unit tests for scripts/check_index.py and the action's steps ###
+  tests-unit:
+    name: "Unit Tests"
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -191,14 +191,143 @@ jobs:
         # yamllint disable-line rule:line-length
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
-          version: "0.13.4"
+          version-file: "requirements/uv.txt"
           python-version: "3.13"
 
-      - name: "Run pip fallback tests"
+      - name: "Run unit tests"
         shell: bash
         run: |
-          # Run pip fallback tests
+          # Run unit tests
           # Fail if uv.lock is stale, then install exactly what it pins
           uv lock --check
           uv sync --frozen
           uv run --frozen pytest -v
+
+  ### The action against a workspace planted with Python and uv bait ###
+  tests-isolation:
+    name: "Workspace Isolation"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+        # An explicit request (UV_PYTHON and kin) would mask discovery
+        # of an active environment, so each runs on its own.
+        selector: [request, active-environment]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      # Every bait records that it ran in a marker outside the workspace.
+      # Relative PYTHONPATH and UV_* settings reach the action through
+      # GITHUB_ENV, as a caller's earlier step would set them.
+      - name: "Plant the workspace"
+        shell: bash
+        env:
+          SELECTOR: ${{ matrix.selector }}
+        run: |
+          # Plant the workspace
+          MARKER="$RUNNER_TEMP/bait-ran"
+          echo "MARKER=$MARKER" >> "$GITHUB_ENV"
+          cd "$GITHUB_WORKSPACE"
+          bait="open('$MARKER', 'a').write(__file__ + '\\n')"
+          mkdir -p .venv/bin .venv/conda-meta pkg/urllib home/lib/python3.13
+          for module in json base64 sitecustomize usercustomize; do
+            printf '%s\n' "$bait" > "pkg/$module.py"
+          done
+          printf '%s\n' "$bait" > pkg/urllib/__init__.py
+          cp pkg/*.py .
+          printf '#!/bin/sh\necho planted-tool-ran >> "%s"\nexit 1\n' \
+            "$MARKER" > .venv/bin/python3
+          chmod +x .venv/bin/python3
+          for tool in python python3.13 uv; do
+            cp .venv/bin/python3 ".venv/bin/$tool"
+          done
+          printf 'home = %s/.venv/bin\n' "$GITHUB_WORKSPACE" > .venv/pyvenv.cfg
+          # setup-uv would add XDG_BIN_HOME to PATH for later steps
+          mkdir -p xdg-bin
+          for tool in env bash; do
+            cp .venv/bin/python3 "xdg-bin/$tool"
+          done
+          printf '[tool.uv]\npython-preference = "only-system"\n' \
+            > pyproject.toml
+          printf 'python-downloads = "never"\n' > uv.toml
+          echo '3.13' > .python-version
+          venv="$GITHUB_WORKSPACE/.venv"
+          {
+            echo "PATH=$venv/bin:$PATH"
+            echo "PYTHONPATH=pkg:."
+            echo "PYTHONHOME=$GITHUB_WORKSPACE/home"
+            echo "PYTHONUSERBASE=$GITHUB_WORKSPACE/pkg"
+            echo "PYTHONSTARTUP=$GITHUB_WORKSPACE/json.py"
+            echo "PYTHONEXECUTABLE=$venv/bin/python3"
+            echo "__PYVENV_LAUNCHER__=$venv/bin/python3"
+            echo "UV_PYTHON_INSTALL_MIRROR=https://127.0.0.1:9"
+            # A fresh interpreter query on every uv call, cache or not
+            echo "UV_NO_CACHE=1"
+            # Would make setup-uv probe uv before installing it
+            case "$(uname -m)" in
+              arm64|aarch64) echo "UV_PYTHON_ARCH=aarch64" ;;
+              *) echo "UV_PYTHON_ARCH=x86_64" ;;
+            esac
+            echo "XDG_BIN_HOME=$GITHUB_WORKSPACE/xdg-bin"
+            if [ "$SELECTOR" = request ]; then
+              echo "UV_PYTHON=$venv/bin/python3"
+              echo "UV_PYTHON_SEARCH_PATH=$venv/bin"
+              echo "UV_PYTHON_INSTALL_DIR=$venv"
+              echo "UV_PYTHON_PREFERENCE=only-system"
+            else
+              echo "VIRTUAL_ENV=$venv"
+              echo "CONDA_PREFIX=$venv"
+              echo "CONDA_DEFAULT_ENV=base"
+              echo "UV_INTERNAL__PARENT_INTERPRETER=$venv/bin/python3"
+              echo "UV_INTERNAL__TEST_PYTHON_MANAGED=$venv/bin/python3"
+              echo "UV_CACHE_DIR=$venv"
+            fi
+          } >> "$GITHUB_ENV"
+          # Control: the bait is live for a Python that is not isolated
+          PYTHONPATH=pkg python3 -c 'import json' || true
+          if [ ! -s "$MARKER" ]; then
+            echo "Control failed: planted modules did not run ❌"; exit 1
+          fi
+          rm "$MARKER"
+
+      - name: "Run Action: ${{ github.repository }} [planted workspace]"
+        id: planted
+        uses: $/
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
+          package_version: v1.1.10
+
+      # The interpreter now exists, so a lookup that ran would find it:
+      # the case an inherited location variable would redirect.
+      - name: "Run Action: ${{ github.repository }} [planted, warm]"
+        id: planted-warm
+        uses: $/
+        with:
+          index_url: https://test.pypi.org/simple
+          package_name: ITR
+          package_version: v1.1.10
+
+      - name: "Verify no bait ran and the query worked"
+        shell: bash
+        env:
+          RESULT: >-
+            ${{ steps.planted.outputs.PACKAGE_MATCH }}
+            ${{ steps.planted.outputs.VERSION_MATCH }}
+            ${{ steps.planted-warm.outputs.PACKAGE_MATCH }}
+            ${{ steps.planted-warm.outputs.VERSION_MATCH }}
+        run: |
+          # Verify no bait ran and the query worked
+          if [ -e "$MARKER" ]; then
+            echo "Planted code ran ❌"; cat "$MARKER"; exit 1
+          fi
+          case ":$PATH:" in
+            *":$GITHUB_WORKSPACE/xdg-bin:"*)
+              echo "The action put a checkout directory on PATH ❌"; exit 1 ;;
+          esac
+          if [ "$RESULT" != "true true true true" ]; then
+            echo "Expected 'true true true true', got '$RESULT' ❌"; exit 1
+          fi
+          echo "No planted code ran; outputs '$RESULT' ✅"

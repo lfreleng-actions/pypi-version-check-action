@@ -18,6 +18,16 @@ updates:
     cooldown:
       default-days: 7
 
+  # The uv release the action installs: requirements/uv.txt
+  - package-ecosystem: "pip"
+    directory: "/requirements"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "Chore"
+    cooldown:
+      default-days: 7
+
   # Test dependencies: the dev group in pyproject.toml and uv.lock
   - package-ecosystem: "uv"
     directory: "/"

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# Pinned uv version the action installs.
+#
+# Kept in a requirements file, rather than inline in action.yaml, so
+# Dependabot maintains it. setup-uv reads it through version-file. The
+# uv release also fixes which Python builds, and which hashes, the
+# action's "uv python install" accepts.
+uv==0.13.5
