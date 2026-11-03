@@ -7,4 +7,4 @@
 # Dependabot maintains it. setup-uv reads it through version-file. The
 # uv release also fixes which Python builds, and which hashes, the
 # action's "uv python install" accepts.
-uv==0.13.5
+uv==0.13.6
