@@ -10,7 +10,7 @@ name = "pypi-version-check-action"
 version = "0.0.0"
 description = "Checks PyPI for a given package (and optional build/release)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = []
 
@@ -29,3 +29,10 @@ verify-hashes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
+
+[tool.basedpyright]
+extraPaths = ["scripts"]
+
+[tool.mypy]
+mypy_path = "scripts"
