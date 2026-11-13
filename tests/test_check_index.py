@@ -558,6 +558,45 @@ def test_action_runs_the_script_isolated_from_the_workspace() -> None:
     assert "unset PYTHONEXECUTABLE __PYVENV_LAUNCHER__" in text(check, "run")
 
 
+REFUSAL = "Refuse an inherited UV_NO_MODIFY_PATH"
+
+
+def test_no_modify_path_refusal_runs_before_setup_uv() -> None:
+    """The refusal runs ahead of setup-uv, which it exists to protect."""
+    action = cast(
+        "dict[str, dict[str, list[dict[str, object]]]]",
+        yaml.safe_load((REPO_ROOT / "action.yaml").read_text()),
+    )
+    names = [entry.get("name") for entry in action["runs"]["steps"]]
+    assert names.index(REFUSAL) < names.index("Install uv")
+
+
+@pytest.mark.parametrize(
+    ("extra", "refused"),
+    [
+        ({}, False),
+        ({"UV_NO_MODIFY_PATH": ""}, True),
+        ({"UV_NO_MODIFY_PATH": "1"}, True),
+    ],
+    ids=["unset", "empty", "nonempty"],
+)
+def test_no_modify_path_refusal(extra: dict[str, str], refused: bool) -> None:
+    """Set to any value, even an empty one, UV_NO_MODIFY_PATH stops the action."""
+    proc = subprocess.run(
+        [*BASH, text(step(REFUSAL), "run")],
+        env={"PATH": os.environ["PATH"], **extra},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if refused:
+        assert proc.returncode == 1
+        assert "::error title=Unsupported environment::" in proc.stdout
+    else:
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert proc.stdout == ""
+
+
 def plant_interpreters(tmp_path: Path) -> tuple[dict[str, str], Path]:
     """Bait interpreters, and every caller setting known to point uv at one."""
     marker = tmp_path / "bait-ran"
